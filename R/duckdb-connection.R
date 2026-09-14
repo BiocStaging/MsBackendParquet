@@ -108,10 +108,6 @@
 #' Register (once) a DuckDB view over the Parquet files of a dataset and
 #' return its name.
 #'
-#' `backendInitialize()` normalises the path once so the hot path is a bare
-#' environment lookup. A non-normalised path still resolves, but pays a
-#' `normalizePath()` on the cache miss only.
-#'
 #' @importMethodsFrom DBI dbQuoteString
 #'
 #' @importMethodsFrom DBI dbQuoteIdentifier
@@ -132,18 +128,44 @@
         }
         path <- norm
     }
-    sp <- .spectra_path(path)
-    if (!dir.exists(sp)) {
-        stop("Parquet dataset directory '", sp, "' does not exist.",
-             call. = FALSE)
+    if (.dataset_kind(path) == "mzpeak") {
+        glob <- file.path(.index_spectra_path(path), "**", "*.parquet")
+    } else {
+        sp <- .spectra_path(path)
+        if (!dir.exists(sp)) {
+            stop("Parquet dataset directory '", sp, "' does not exist.",
+                 call. = FALSE)
+        }
+        glob <- file.path(sp, "**", "*.parquet")
     }
-    view <- .view_name()
-    glob <- file.path(sp, "**", "*.parquet")
-    dbExecute(con, sprintf(
-        "CREATE OR REPLACE VIEW %s AS SELECT * FROM read_parquet(%s, hive_partitioning = TRUE)",
-        dbQuoteIdentifier(con, view),
-        dbQuoteString(con, glob)))
+    view <- .translating_dataset_view(glob, path)
     assign(path, view, envir = .duckdb_state$views)
+    view
+}
+
+#' Register a DuckDB view that reads a dataset's Parquet files and presents
+#' them with `Spectra` names and units.
+#'
+#' Used for both dataset kinds: an mzPeak-backed dataset's derived index and
+#' a natively converted dataset's `spectra/` files are both written in
+#' mzPeak's column vocabulary. Hive partitioning supplies the partition
+#' columns from the directory names and lets DuckDB skip partitions without
+#' opening their files; `union_by_name` absorbs the schema differences
+#' between archives, which are normal rather than exceptional:
+#' conformant writers promote different parameters to columns.
+#'
+#' @noRd
+.translating_dataset_view <- function(glob, path) {
+    con <- .duckdb_con()
+    src <- paste0(
+        "read_parquet(", DBI::dbQuoteString(con, glob),
+        ", hive_partitioning = TRUE, union_by_name = TRUE)")
+    available <- names(DBI::dbGetQuery(
+        con, paste0("SELECT * FROM ", src, " LIMIT 0")))
+    view <- .view_name()
+    DBI::dbExecute(con, paste0(
+        "CREATE OR REPLACE VIEW ", DBI::dbQuoteIdentifier(con, view),
+        " AS ", .view_select_sql(available, src, path)))
     view
 }
 
@@ -170,6 +192,7 @@
         }
     }
     .meta_cache_drop(unique(c(path, key)))
+    .manifest_cache_drop(unique(c(path, key)))
     invisible()
 }
 
@@ -179,8 +202,7 @@
 
 #' Pre-quote a column identifier. SQL identifier names in this backend are
 #' well-behaved (ASCII alphanumeric plus `_` and `.`), so a simple `"<name>"`
-#' wrap is equivalent to `DBI::dbQuoteIdentifier()` without the S4 dispatch
-#' cost -- checked once per name and cached.
+#' wrap is equivalent to `DBI::dbQuoteIdentifier()` without the S4 dispatch cost.
 #'
 #' @noRd
 .quoted_idents <- new.env(parent = emptyenv())
@@ -214,7 +236,7 @@
 #' @noRd
 .MAX_INLINE_IDS <- 1024L
 
-.ids_where <- function(ids, full = FALSE) {
+.ids_where <- function(ids, full = FALSE, col = "spectrum_id_") {
     if (isTRUE(full)) {
         return(NULL)
     }
@@ -226,14 +248,14 @@
         lo <- ids[1L]
         hi <- ids[n]
         if (hi - lo + 1L == n && !is.unsorted(ids)) {
-            return(sprintf("spectrum_id_ BETWEEN %d AND %d",
+            return(sprintf("%s BETWEEN %d AND %d", col,
                            as.integer(lo), as.integer(hi)))
         }
     }
     if (n > .MAX_INLINE_IDS) {
         return(NA_character_)
     }
-    sprintf("spectrum_id_ IN (%s)", paste(as.integer(ids), collapse = ","))
+    sprintf("%s IN (%s)", col, paste(as.integer(ids), collapse = ","))
 }
 
 #' Run `f(tbl_name)` with `ids` registered as a temporary DuckDB table so a
