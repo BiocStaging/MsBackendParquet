@@ -58,7 +58,7 @@
 #' with [save()] / [base::saveRDS()] and reused across parallel workers.
 #' The DuckDB connection used to read the dataset is held at package
 #' level, not on the object, and is keyed by process id, so a forked
-#' worker transparently opens its own. Accordingly, [backendBpparam()]
+#' worker transparently opens its own. Accordingly, [Spectra::backendBpparam()]
 #' returns the requested parallel processing setup unchanged.
 #'
 #' @section Creation of backend objects:
@@ -267,9 +267,11 @@ setValidity("MsBackendParquet", function(object) {
 
 #' @rdname MsBackendParquet
 #'
+#' @importFrom methods new
+#'
 #' @export MsBackendParquet
 MsBackendParquet <- function() {
-    methods::new("MsBackendParquet")
+    new("MsBackendParquet")
 }
 
 #' @importMethodsFrom Spectra show
@@ -278,7 +280,7 @@ MsBackendParquet <- function() {
 #'
 #' @rdname MsBackendParquet
 setMethod("show", "MsBackendParquet", function(object) {
-    methods::callNextMethod()
+    callNextMethod()
     if (length(.path(object))) {
         cat("Dataset: ", .path(object), "\n", sep = "")
     }
@@ -321,11 +323,11 @@ setMethod(
         object@.peaks_vars <- .dataset_peak_names(path)
         object@.full <- TRUE
         sv <- union(object@.dataset_vars, object@.peaks_vars)
-        object <- methods::callNextMethod(
+        object <- callNextMethod(
             object,
             nspectra = length(object@spectraIds),
             spectraVariables = sv)
-        methods::validObject(object)
+        validObject(object)
 
         # Load the filter columns once so the first filter does not pay for it.
         .meta_cache_warm(path, object@.dataset_vars, length(object@spectraIds))
@@ -356,7 +358,7 @@ setMethod("[", "MsBackendParquet", function(x, i, j, ..., drop = FALSE) {
     if (missing(i)) {
         return(x)
     }
-    i <- MsCoreUtils::i2index(i, length(x), as.character(x@spectraIds))
+    i <- i2index(i, length(x), as.character(x@spectraIds))
     extractByIndex(x, i)
 })
 
@@ -364,6 +366,8 @@ setMethod("[", "MsBackendParquet", function(x, i, j, ..., drop = FALSE) {
 #'
 #' @importMethodsFrom ProtGenerics extractByIndex
 #'
+#' @importFrom methods callNextMethod
+#' 
 #' @exportMethod extractByIndex
 setMethod(
     "extractByIndex", c("MsBackendParquet", "ANY"),
@@ -376,8 +380,8 @@ setMethod(
             object@.full <- FALSE
             object@.predicate_clean <- FALSE
         }
-        methods::slot(object, "spectraIds", check = FALSE) <- new_ids
-        methods::callNextMethod(object, i = i)
+        slot(object, "spectraIds", check = FALSE) <- new_ids
+        callNextMethod(object, i = i)
     })
 
 #' @importMethodsFrom ProtGenerics peaksData
@@ -445,7 +449,7 @@ setReplaceMethod("$", "MsBackendParquet", function(x, name, value) {
     if (name == "spectrum_id_") {
         stop("'spectrum_id_' cannot be modified.", call. = FALSE)
     }
-    methods::callNextMethod()
+    callNextMethod()
 })
 
 #' @importMethodsFrom ProtGenerics spectraData spectraVariables
@@ -507,7 +511,7 @@ setMethod(
         }
 
         if (.has_local_variable(object, "msLevel")) {
-            return(methods::callNextMethod())
+            return(callNextMethod())
         }
 
         msLevel <- as.integer(msLevel)
@@ -536,13 +540,13 @@ setMethod(
             if (length(msLevel.) && !.has_local_variable(object, "msLevel")) {
                 object$msLevel <- msLevel(object)
             }
-            return(methods::callNextMethod())
+            return(callNextMethod())
         }
         if (length(msLevel.) && .has_local_variable(object, "msLevel")) {
             if (!.has_local_variable(object, "rtime")) {
                 object$rtime <- rtime(object)
             }
-            return(methods::callNextMethod())
+            return(callNextMethod())
         }
         rng <- .pred_range("rtime", rt[1L], rt[2L])
         rtv <- .meta_values(object, "rtime")
@@ -579,7 +583,7 @@ setMethod(
         }
 
         if (.has_local_variable(object, "dataOrigin")) {
-            return(methods::callNextMethod())
+            return(callNextMethod())
         }
 
         dataOrigin <- as.character(dataOrigin)
@@ -608,7 +612,7 @@ setMethod(
         }
 
         if (.has_local_variable(object, "precursorMz")) {
-            return(methods::callNextMethod())
+            return(callNextMethod())
         }
 
         mz <- range(mz)
@@ -635,7 +639,7 @@ setMethod(
         }
 
         if (.has_local_variable(object, "precursorMz")) {
-            return(methods::callNextMethod())
+            return(callNextMethod())
         }
 
         lmz <- length(mz)
@@ -645,7 +649,7 @@ setMethod(
         if (length(tolerance) != lmz) {
             tolerance <- rep(tolerance[1L], lmz)
         }
-        diffs <- MsCoreUtils::ppm(mz, ppm) + tolerance
+        diffs <- ppm(mz, ppm) + tolerance
         los <- mz - diffs
         his <- mz + diffs
         # Per-value tolerance windows, OR-ed together; DuckDB pushes the
@@ -691,7 +695,7 @@ setMethod("backendMerge", "MsBackendParquet", function(object, ...) {
     } else {
         res <- object[[1L]]
     }
-    methods::validObject(res)
+    validObject(res)
     res
 })
 
@@ -710,7 +714,7 @@ setMethod("precScanNum", "MsBackendParquet", function(object) {
 #'
 #' @exportMethod centroided
 setMethod("centroided", "MsBackendParquet", function(object) {
-    as.logical(methods::callNextMethod())
+    as.logical(callNextMethod())
 })
 
 #' @rdname MsBackendParquet
@@ -719,7 +723,7 @@ setMethod("centroided", "MsBackendParquet", function(object) {
 #'
 #' @exportMethod smoothed
 setMethod("smoothed", "MsBackendParquet", function(object) {
-    as.logical(methods::callNextMethod())
+    as.logical(callNextMethod())
 })
 
 #' @importMethodsFrom ProtGenerics tic
@@ -735,7 +739,7 @@ setMethod("tic", "MsBackendParquet", function(object, initial = TRUE) {
     if (initial) {
         spectraData(object, "totIonCurrent")[, 1L]
     } else {
-        MsCoreUtils::vapply1d(intensity(object), sum, na.rm = TRUE)
+        vapply1d(intensity(object), sum, na.rm = TRUE)
     }
 })
 

@@ -26,7 +26,7 @@
 \alias{supportsSetBackend,MsBackendParquet-method}
 \alias{tic,MsBackendParquet-method}
 \alias{uniqueMsLevels,MsBackendParquet-method}
-\alias{[,MsBackendParquet,ANY,ANY-method}
+\alias{[,MsBackendParquet-method}
 \alias{$<-,MsBackendParquet-method}
 \alias{precScanNum,MsBackendParquet-method}
 \alias{centroided,MsBackendParquet-method}
@@ -42,7 +42,7 @@ MsBackendParquet()
 
 \S4method{dataStorage}{MsBackendParquet}(object)
 
-\S4method{[}{MsBackendParquet,ANY,ANY}(x, i, j, ..., drop = FALSE)
+\S4method{[}{MsBackendParquet}(x, i, j, ..., drop = FALSE)
 
 \S4method{extractByIndex}{MsBackendParquet,ANY}(object, i)
 
@@ -185,7 +185,7 @@ connection), \code{MsBackendParquet} objects can be serialised to disk
 with \code{\link[=save]{save()}} / \code{\link[base:saveRDS]{base::saveRDS()}} and reused across parallel workers.
 The DuckDB connection used to read the dataset is held at package
 level, not on the object, and is keyed by process id, so a forked
-worker transparently opens its own. Accordingly, \code{\link[ProtGenerics:backendBpparam]{backendBpparam()}}
+worker transparently opens its own. Accordingly, \code{\link[Spectra:backendBpparam]{Spectra::backendBpparam()}}
 returns the requested parallel processing setup unchanged.
 }
 \section{Creation of backend objects}{
