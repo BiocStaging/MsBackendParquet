@@ -105,17 +105,28 @@
 # SQL predicate construction
 # ------------------------------------------------------------------------------
 
-#' Format a numeric literal at full double precision. `as.character()` on a
-#' double drops digits (15 significant), which for an m/z bound is a silent
-#' correctness bug.
+#' Format a numeric literal that parses back to exactly the double it came
+#' from; truncating an m/z bound is a silent correctness bug.
+#'
+#' 17 significant digits suffice on a correct `printf`, but that is an
+#' assumption about the C library: on at least one platform `%.17g` of 1e-300
+#' comes back parts in 1e7 adrift. So widen until the literal round-trips,
+#' and check that it did.
 #'
 #' @noRd
 .sql_num <- function(x) {
     if (is.na(x)) return("NULL")
     if (is.infinite(x))
-        return(if (x > 0) sprintf("%.17g", .Machine$double.xmax)
-               else sprintf("%.17g", -.Machine$double.xmax))
-    sprintf("%.17g", x)
+        x <- if (x > 0) .Machine$double.xmax else -.Machine$double.xmax
+    for (digits in 15:17) {
+        lit <- sprintf("%.*g", digits, x)
+        if (as.numeric(lit) == x) return(lit)
+    }
+    lit <- sprintf("%.17g", x)
+    warning("the literal ", lit, " does not parse back to the number it was ",
+            "built from; a filter bound may be off by a rounding step.",
+            call. = FALSE)
+    lit
 }
 
 #' @noRd
