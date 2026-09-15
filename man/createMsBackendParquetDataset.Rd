@@ -95,3 +95,42 @@ Apache Arrow writes a Hive-partitioned dataset. Partitioning
 typically enables Arrow's partition pruning when filtering and can
 substantially speed up access to large datasets.
 }
+\examples{
+library(Spectra)
+
+## Spectra data can be written to a Parquet dataset directly, without
+## going through raw files: any `DataFrame` with `mz` and `intensity`
+## peaks variables will do.
+sd <- S4Vectors::DataFrame(
+    msLevel = c(1L, 1L, 2L),
+    rtime = c(1.0, 2.0, 3.0),
+    dataOrigin = c("file-a", "file-a", "file-b"))
+sd$mz <- IRanges::NumericList(c(100, 110), c(101, 111),
+                              c(102, 112), compress = FALSE)
+sd$intensity <- IRanges::NumericList(c(10, 20), c(11, 21),
+                                     c(12, 22), compress = FALSE)
+
+## `dataOrigin` becomes a Hive partitioning key, so a filter on it can
+## skip whole files rather than scanning them.
+path <- tempfile()
+createMsBackendParquetDataset(path = path, data = sd,
+                              partitioning = "dataOrigin")
+
+be <- backendInitialize(MsBackendParquet(), path = path)
+be
+spectraVariables(be)
+peaksData(be)
+
+## Raw files are imported with `x` instead of `data`.
+if (requireNamespace("mzR", quietly = TRUE)) {
+    fl <- system.file("extdata", "demo.mzML",
+                      package = "MsBackendParquet")
+    from_files <- tempfile()
+    createMsBackendParquetDataset(path = from_files, x = fl)
+    print(backendInitialize(MsBackendParquet(), path = from_files))
+}
+}
+\seealso{
+\code{\link[=mzMLToParquet]{mzMLToParquet()}} for a one-call wrapper over raw mzML files,
+\code{\link[=MsBackendParquet]{MsBackendParquet()}} to open the resulting dataset.
+}

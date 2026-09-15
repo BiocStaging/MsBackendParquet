@@ -105,4 +105,16 @@ test_that("supportsSetBackend is TRUE and backendBpparam echoes BPPARAM", {
     expect_true(supportsSetBackend(be))
     bp <- BiocParallel::SerialParam()
     expect_identical(Spectra::backendBpparam(be, bp), bp)
+    ## Cluster workers are fresh processes, so they inherit no DuckDB handle.
+    bp <- BiocParallel::SnowParam(2)
+    expect_identical(Spectra::backendBpparam(be, bp), bp)
+})
+
+test_that("backendBpparam refuses fork-based parallelisation", {
+    ## A forked child inherits the package-level DuckDB connection and hangs
+    ## in its finalizer at the next garbage collection.
+    be <- .make_test_backend()
+    expect_s4_class(
+        Spectra::backendBpparam(be, BiocParallel::MulticoreParam(2)),
+        "SerialParam")
 })

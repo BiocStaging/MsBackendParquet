@@ -79,6 +79,9 @@
 #'
 #' @return Invisibly returns `path` (with any tilde expanded).
 #'
+#' @seealso [mzMLToParquet()] for a one-call wrapper over raw mzML files,
+#'     [MsBackendParquet()] to open the resulting dataset.
+#'
 #' @md
 #'
 #' @export
@@ -87,6 +90,41 @@
 #' @importFrom Spectra spectraData coreSpectraVariables
 #' @importFrom BiocParallel SerialParam bpparam
 #' @importFrom MsCoreUtils vapply1l
+#'
+#' @examples
+#' library(Spectra)
+#'
+#' ## Spectra data can be written to a Parquet dataset directly, without
+#' ## going through raw files: any `DataFrame` with `mz` and `intensity`
+#' ## peaks variables will do.
+#' sd <- S4Vectors::DataFrame(
+#'     msLevel = c(1L, 1L, 2L),
+#'     rtime = c(1.0, 2.0, 3.0),
+#'     dataOrigin = c("file-a", "file-a", "file-b"))
+#' sd$mz <- IRanges::NumericList(c(100, 110), c(101, 111),
+#'                               c(102, 112), compress = FALSE)
+#' sd$intensity <- IRanges::NumericList(c(10, 20), c(11, 21),
+#'                                      c(12, 22), compress = FALSE)
+#'
+#' ## `dataOrigin` becomes a Hive partitioning key, so a filter on it can
+#' ## skip whole files rather than scanning them.
+#' path <- tempfile()
+#' createMsBackendParquetDataset(path = path, data = sd,
+#'                               partitioning = "dataOrigin")
+#'
+#' be <- backendInitialize(MsBackendParquet(), path = path)
+#' be
+#' spectraVariables(be)
+#' peaksData(be)
+#'
+#' ## Raw files are imported with `x` instead of `data`.
+#' if (requireNamespace("mzR", quietly = TRUE)) {
+#'     fl <- system.file("extdata", "demo.mzML",
+#'                       package = "MsBackendParquet")
+#'     from_files <- tempfile()
+#'     createMsBackendParquetDataset(path = from_files, x = fl)
+#'     print(backendInitialize(MsBackendParquet(), path = from_files))
+#' }
 createMsBackendParquetDataset <- function(
     path = character(),
     x = character(),
@@ -241,12 +279,22 @@ createMsBackendParquetDataset <- function(
 #' @importFrom tools file_ext
 #'
 #' @examples
-#' \dontrun{
-#' files <- c("sample-1.mzML", "sample-2.mzML")
-#' be <- mzMLToParquet(files, path = tempfile(),
-#'                     partitioning = "dataOrigin")
 #' library(Spectra)
-#' sps <- Spectra(be)
+#'
+#' ## Reading mzML needs `mzR`.
+#' if (requireNamespace("mzR", quietly = TRUE)) {
+#'     files <- system.file("extdata", "demo.mzML",
+#'                          package = "MsBackendParquet")
+#'
+#'     ## Convert and open in one call: the returned backend is already
+#'     ## initialized on the new dataset.
+#'     be <- mzMLToParquet(files, path = tempfile(),
+#'                         partitioning = "dataOrigin", verbose = FALSE)
+#'     print(be)
+#'
+#'     sps <- Spectra(be)
+#'     print(rtime(sps))
+#'     print(peaksData(sps)[[1L]])
 #' }
 mzMLToParquet <- function(
     files,

@@ -39,8 +39,22 @@ of broadly the same size (sorting compresses better, but how much better
 depends entirely on the data).
 }
 \examples{
-\dontrun{
-buildProjection(path)
-filterContainsMz(be, 278.093, ppm = 20)
-}
+## Projections are built from mzPeak datasets; two small archives ship
+## with the package.
+qc01 <- system.file("extdata", "QC01.mzpeak",
+                    package = "MsBackendParquet")
+path <- tempfile()
+createMzPeakDataset(qc01, path = path, verbose = FALSE)
+be <- backendInitialize(MsBackendParquet(), path = path)
+
+buildProjection(path, verbose = FALSE)
+
+## The query now reads a handful of m/z-ordered blocks instead of every
+## spectrum's peaks. The answer is the same either way.
+filterContainsMz(be, 201, ppm = 20)
+
+## A projection is only a cache: dropping it frees the disk it used and
+## changes nothing about the result.
+dropProjection(path, verbose = FALSE)
+filterContainsMz(be, 201, ppm = 20)
 }

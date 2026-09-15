@@ -77,9 +77,21 @@
 #' connection), `MsBackendParquet` objects can be serialised to disk
 #' with [save()] / [base::saveRDS()] and reused across parallel workers.
 #' The DuckDB connection used to read the dataset is held at package
-#' level, not on the object, and is keyed by process id, so a forked
-#' worker transparently opens its own. Accordingly, [backendBpparam()]
-#' returns the requested parallel processing setup unchanged.
+#' level, not on the object, and is keyed by process id, so a worker
+#' started in a *new* process opens its own.
+#'
+#' Forked workers are the exception, and [backendBpparam()] therefore
+#' downgrades a fork-based setup such as [BiocParallel::MulticoreParam()]
+#' to [BiocParallel::SerialParam()]. A fork inherits the parent's DuckDB
+#' connection as a live R external pointer whose finalizer, when the
+#' child next garbage collects, destroys the inherited database and waits
+#' for DuckDB's scheduler threads to join. `fork()` clones only the
+#' calling thread, so those threads do not exist in the child and the
+#' wait never completes. Cluster-based setups such as
+#' [BiocParallel::SnowParam()] start fresh processes, inherit nothing and
+#' are passed through unchanged. Little is given up by this: DuckDB
+#' parallelises scans internally, so the work is already spread across
+#' cores before `Spectra` chunks anything.
 #'
 #' @section Creation of backend objects:
 #'
@@ -803,12 +815,20 @@ setMethod("supportsSetBackend", "MsBackendParquet", function(object, ...) {
 #'
 #' @importFrom BiocParallel SerialParam bpparam
 #'
+#' @importClassesFrom BiocParallel MulticoreParam
+#'
+#' @importFrom methods is
+#'
 #' @rdname MsBackendParquet
 setMethod(
     "backendBpparam", signature = "MsBackendParquet",
     function(object, BPPARAM = bpparam()) {
-        # The backend stores no live connection, so any BPPARAM is fine.
-        BPPARAM
+        # A forked child inherits the package-level DuckDB connection as a
+        # live external pointer. Its finalizer runs at the child's next
+        # garbage collection and blocks in ~TaskScheduler() joining threads
+        # that fork() did not clone, so the child never returns. Cluster
+        # workers are fresh processes and inherit nothing.
+        if (is(BPPARAM, "MulticoreParam")) SerialParam() else BPPARAM
     })
 
 #' @importMethodsFrom ProtGenerics setBackend

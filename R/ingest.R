@@ -317,12 +317,27 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' path <- tempfile()
-#' createMzPeakDataset(c("run1.mzpeak", "run2.mzpeak"), path = path)
 #' library(Spectra)
+#'
+#' ## Two small mzPeak archives ship with the package.
+#' qc01 <- system.file("extdata", "QC01.mzpeak",
+#'                     package = "MsBackendParquet")
+#' qc02 <- system.file("extdata", "QC02.mzpeak",
+#'                     package = "MsBackendParquet")
+#'
+#' path <- tempfile()
+#' createMzPeakDataset(qc01, path = path, verbose = FALSE)
+#'
 #' sps <- Spectra(backendInitialize(MsBackendParquet(), path = path))
-#' }
+#' length(sps)
+#'
+#' ## More runs can join the same dataset later; only the metadata index
+#' ## grows, the archives themselves are left where they are.
+#' addMzPeakArchives(path, qc02, verbose = FALSE)
+#'
+#' sps <- Spectra(backendInitialize(MsBackendParquet(), path = path))
+#' length(sps)
+#' table(dataOrigin(sps))
 createMzPeakDataset <- function(archives, path,
                                 link = c("reference", "copy"),
                                 verbose = TRUE) {

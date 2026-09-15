@@ -27,7 +27,7 @@ library(BiocStyle)
 
 The `r Biocpkg("MsBackendParquet")` package provides a backend for
 `r Biocpkg("Spectra")` objects that stores mass spectrometry (MS) data
-in an on-disk **mzStack** dataset, built on
+in an on-disk dataset built on
 [Apache Parquet](https://parquet.apache.org/).
 Datasets are *written* with the
 [Apache Arrow](https://arrow.apache.org/docs/r) R bindings and *queried*
@@ -35,9 +35,9 @@ with [DuckDB](https://duckdb.org/), keeping the spectra metadata
 together with the `mz`/`intensity` peak values in a columnar format that
 supports compression, dictionary encoding and Hive-style partitioning.
 
-An mzStack dataset is a directory identified by an `mzStack.json`
-manifest, holding one or more *runs*. A run is either `native` — converted
-from raw MS data files, with peaks stored alongside the metadata — or
+A dataset is a directory identified by an `mzStack.json`
+manifest, holding one or more *runs*. A run is either `native` (converted
+from raw MS data files, with peaks stored alongside the metadata) or
 `mzpeak`, an index over external
 [HUPO-PSI mzPeak](https://github.com/HUPO-PSI/mzPeak) archives that are
 read where they are and never modified (see
@@ -56,12 +56,12 @@ the on-disk dataset read-only.
 
 # Creating a Parquet dataset
 
-The quickest way to turn raw MS data files (mzML, mzXML, netCDF) into a
+The quickest way to turn raw MS data files (e.g., mzML) into a
 Parquet dataset is the `mzMLToParquet()` helper. It validates the input
 files, writes the dataset and returns an initialised backend ready to be
 wrapped in a `Spectra` object:
 
-```{r, eval = FALSE}
+```{r mzml-to-parquet, eval = FALSE}
 library(Spectra)
 library(MsBackendParquet)
 
@@ -74,7 +74,7 @@ For more control (a custom reader backend, chunk sizes, compression
 codec, Parquet row-group size, or writing an existing `DataFrame`), call
 `createMsBackendParquetDataset()` directly:
 
-```{r, eval = FALSE}
+```{r create-ms-backend, eval = FALSE}
 path <- tempfile()
 createMsBackendParquetDataset(path = path, x = files,
                               partitioning = "dataOrigin",
@@ -292,7 +292,7 @@ precedence.
 The cache is controlled through three options (shown with their
 defaults):
 
-```{r, eval = FALSE}
+```{r options, eval = FALSE}
 # Enable ("auto", the default) or disable ("off") the metadata cache.
 options(MsBackendParquet.cacheMetadata = "auto")
 
@@ -351,7 +351,7 @@ Answering such a query would require opening and parsing each archive and its ma
 `MsBackendParquet` bridges the two. `createMzPeakDataset()` registers a set
 of archives as one dataset:
 
-```{r, eval = FALSE}
+```{r create-mzpeak-dataset, eval = FALSE}
 library(Spectra)
 library(MsBackendParquet)
 
@@ -398,7 +398,7 @@ Several aspects of the data are translated or transformed on input. It is theref
 - **Profile and centroid.** mzPeak can hold both representations of the same
   spectrum, in separate files. Choose with `representation`:
 
-```{r, eval = FALSE}
+```{r mzpeak-repr, eval = FALSE}
 be <- backendInitialize(MsBackendParquet(), path = path,
                         representation = "centroid")
 ```
@@ -422,7 +422,7 @@ range).
 `filterContainsMz()` runs that search inside the storage engine rather than
 pulling peaks into R:
 
-```{r, eval = FALSE}
+```{r filter-contains-mz, eval = FALSE}
 hits <- filterContainsMz(be, 278.093, ppm = 20)
 ```
 
@@ -430,8 +430,8 @@ For datasets where this is a common query, build an m/z-ordered copy of the
 signal. Sorting is what makes the block statistics useful, so the same
 search then reads a handful of blocks instead of everything:
 
-```{r, eval = FALSE}
-buildProjection(path)          # optional, per-run, deletable
+```{r build-projection, eval = FALSE}
+buildProjection(path) # optional, per-run, deletable
 ```
 
 On a 5-million-point test dataset this made `filterContainsMz()` around eight
@@ -449,7 +449,7 @@ whole chunk of peaks in memory before writing it to Parquet. The
 batches of spectra directly from `mzR::openMSfile()` into Apache
 Arrow's incremental `ParquetFileWriter`:
 
-```{r, eval = FALSE}
+```{r mzml-to-parquet-streaming, eval = FALSE}
 be <- mzMLToParquet("huge-sample.mzML",
                     path = tempfile(),
                     engine = "mzr",

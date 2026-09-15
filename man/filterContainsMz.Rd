@@ -29,3 +29,25 @@ The query is much faster when the dataset has an \code{mzsorted} projection
 (see \code{\link[=buildProjection]{buildProjection()}}); without one it reads the archives directly and
 returns the same answer.
 }
+\examples{
+## A dataset over the two mzPeak archives shipped with the package. Their
+## peaks sit in different mass ranges: QC01 near m/z 200, QC02 near 10100.
+archives <- system.file("extdata", c("QC01.mzpeak", "QC02.mzpeak"),
+                        package = "MsBackendParquet")
+path <- tempfile()
+createMzPeakDataset(archives, path = path, verbose = FALSE)
+be <- backendInitialize(MsBackendParquet(), path = path)
+length(be)
+
+## Several m/z values can be searched at once; a spectrum is kept if it
+## holds a peak near any of them.
+res <- filterContainsMz(be, c(201, 10101), ppm = 20)
+length(res)
+peaksData(res)
+
+## No match, no spectra.
+filterContainsMz(be, 500)
+}
+\seealso{
+\code{\link[=buildProjection]{buildProjection()}} to make this query faster.
+}

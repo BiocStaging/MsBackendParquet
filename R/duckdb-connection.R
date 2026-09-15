@@ -50,14 +50,20 @@
 
 #' Lazily create (or return) the package-level DuckDB connection.
 #'
-#' Guarded by the creating process id. `BiocParallel::MulticoreParam` forks,
-#' and a forked child inherits the parent's external pointer: `dbIsValid()`
-#' still reports `TRUE` for it, but the DuckDB instance behind it belongs to
-#' the parent and must not be used or shut down from the child. When the pid
-#' differs we therefore *abandon* the inherited handle rather than
-#' disconnecting it (disconnecting would tear down the parent's database)
-#' and open a fresh one, dropping the view registry with it since view names
-#' are per-connection.
+#' Guarded by the creating process id, so a worker started in a new process
+#' (`BiocParallel::SnowParam` and friends) opens its own connection and its
+#' own view registry, view names being per-connection.
+#'
+#' The pid guard does *not* make the backend fork-safe, and nothing here
+#' can. A forked child inherits the parent's connection as a live R external
+#' pointer; `dbIsValid()` still reports `TRUE` for it. Dropping the last R
+#' reference does not neutralise it, it only makes it collectable, and the
+#' finalizer `duckdb` registered on it then runs at the child's next garbage
+#' collection: `~DatabaseInstance()` waits in `~TaskScheduler()` for DuckDB's
+#' scheduler threads to join, and `fork()` clones only the calling thread, so
+#' the child hangs. Disconnecting it explicitly instead reaches the same
+#' destructor and hangs the same way. `backendBpparam()` therefore refuses
+#' fork-based parallelisation outright; see the note there.
 #'
 #' @noRd
 .duckdb_con <- function() {
@@ -67,8 +73,9 @@
         DBI::dbIsValid(con))
         return(con)
     if (!is.null(con) && !identical(.duckdb_state$pid, pid)) {
-        # Inherited across a fork: drop every reference without touching the
-        # parent's database.
+        # Different process: the inherited handle and its view names are not
+        # ours to use. Safe for a freshly started worker; see the note above
+        # for why a forked child cannot be rescued here.
         .duckdb_state$views <- new.env(parent = emptyenv())
     }
     con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")

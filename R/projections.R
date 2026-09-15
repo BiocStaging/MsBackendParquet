@@ -76,10 +76,24 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' buildProjection(path)
-#' filterContainsMz(be, 278.093, ppm = 20)
-#' }
+#' ## Projections are built from mzPeak datasets; two small archives ship
+#' ## with the package.
+#' qc01 <- system.file("extdata", "QC01.mzpeak",
+#'                     package = "MsBackendParquet")
+#' path <- tempfile()
+#' createMzPeakDataset(qc01, path = path, verbose = FALSE)
+#' be <- backendInitialize(MsBackendParquet(), path = path)
+#'
+#' buildProjection(path, verbose = FALSE)
+#'
+#' ## The query now reads a handful of m/z-ordered blocks instead of every
+#' ## spectrum's peaks. The answer is the same either way.
+#' filterContainsMz(be, 201, ppm = 20)
+#'
+#' ## A projection is only a cache: dropping it frees the disk it used and
+#' ## changes nothing about the result.
+#' dropProjection(path, verbose = FALSE)
+#' filterContainsMz(be, 201, ppm = 20)
 buildProjection <- function(path, type = "mzsorted", runs = NULL,
                             verbose = TRUE) {
     type <- match.arg(type, "mzsorted")
@@ -225,11 +239,32 @@ dropProjection <- function(path, type = "mzsorted", runs = NULL,
 #'
 #' @return `object` subset to the matching spectra, in their original order.
 #'
+#' @seealso [buildProjection()] to make this query faster.
+#'
 #' @md
 #'
 #' @export
 #'
 #' @importFrom MsCoreUtils ppm
+#'
+#' @examples
+#' ## A dataset over the two mzPeak archives shipped with the package. Their
+#' ## peaks sit in different mass ranges: QC01 near m/z 200, QC02 near 10100.
+#' archives <- system.file("extdata", c("QC01.mzpeak", "QC02.mzpeak"),
+#'                         package = "MsBackendParquet")
+#' path <- tempfile()
+#' createMzPeakDataset(archives, path = path, verbose = FALSE)
+#' be <- backendInitialize(MsBackendParquet(), path = path)
+#' length(be)
+#'
+#' ## Several m/z values can be searched at once; a spectrum is kept if it
+#' ## holds a peak near any of them.
+#' res <- filterContainsMz(be, c(201, 10101), ppm = 20)
+#' length(res)
+#' peaksData(res)
+#'
+#' ## No match, no spectra.
+#' filterContainsMz(be, 500)
 filterContainsMz <- function(object, mz = numeric(), tolerance = 0,
                              ppm = 20) {
     if (!length(mz))

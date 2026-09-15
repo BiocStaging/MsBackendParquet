@@ -81,12 +81,22 @@ an initialised \code{MsBackendParquet} instance ready to be wrapped in a
 \code{\link[Spectra:Spectra]{Spectra::Spectra()}} object.
 }
 \examples{
-\dontrun{
-files <- c("sample-1.mzML", "sample-2.mzML")
-be <- mzMLToParquet(files, path = tempfile(),
-                    partitioning = "dataOrigin")
 library(Spectra)
-sps <- Spectra(be)
+
+## Reading mzML needs `mzR`.
+if (requireNamespace("mzR", quietly = TRUE)) {
+    files <- system.file("extdata", "demo.mzML",
+                         package = "MsBackendParquet")
+
+    ## Convert and open in one call: the returned backend is already
+    ## initialized on the new dataset.
+    be <- mzMLToParquet(files, path = tempfile(),
+                        partitioning = "dataOrigin", verbose = FALSE)
+    print(be)
+
+    sps <- Spectra(be)
+    print(rtime(sps))
+    print(peaksData(sps)[[1L]])
 }
 }
 \seealso{

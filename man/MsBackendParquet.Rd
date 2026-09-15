@@ -26,7 +26,7 @@
 \alias{supportsSetBackend,MsBackendParquet-method}
 \alias{tic,MsBackendParquet-method}
 \alias{uniqueMsLevels,MsBackendParquet-method}
-\alias{[,MsBackendParquet,ANY,ANY-method}
+\alias{[,MsBackendParquet-method}
 \alias{$<-,MsBackendParquet-method}
 \alias{precScanNum,MsBackendParquet-method}
 \alias{centroided,MsBackendParquet-method}
@@ -38,11 +38,17 @@ MsBackendParquet()
 
 \S4method{show}{MsBackendParquet}(object)
 
-\S4method{backendInitialize}{MsBackendParquet}(object, path = character(), data, ...)
+\S4method{backendInitialize}{MsBackendParquet}(
+  object,
+  path = character(),
+  data,
+  representation = c("auto", "profile", "centroid"),
+  ...
+)
 
 \S4method{dataStorage}{MsBackendParquet}(object)
 
-\S4method{[}{MsBackendParquet,ANY,ANY}(x, i, j, ..., drop = FALSE)
+\S4method{[}{MsBackendParquet}(x, i, j, ..., drop = FALSE)
 
 \S4method{extractByIndex}{MsBackendParquet,ANY}(object, i)
 
@@ -103,6 +109,14 @@ directory.}
 \item{data}{For \code{backendInitialize()}: optional \code{DataFrame} with the
 spectra data that should be written to a new Parquet dataset.}
 
+\item{representation}{For \code{backendInitialize()} on a dataset built from
+mzPeak archives: \code{character(1)} selecting which signal to read.
+mzPeak keeps profile and centroid data in separate files, and an
+archive may hold both. \code{"auto"} (the default) prefers centroids and
+falls back to profile data; \code{"profile"} and \code{"centroid"} ask for one
+specifically and fail if the archive does not have it. Ignored for
+datasets written by \code{\link[=createMsBackendParquetDataset]{createMsBackendParquetDataset()}}.}
+
 \item{...}{Additional arguments. For \code{backendInitialize()} with
 \code{data}: passed to \code{\link[=createMsBackendParquetDataset]{createMsBackendParquetDataset()}}.}
 
@@ -159,8 +173,22 @@ See the description of the individual methods.
 \description{
 The \code{MsBackendParquet} is an implementation of \code{\link[Spectra:MsBackend]{Spectra::MsBackend()}} for
 \code{\link[Spectra:Spectra]{Spectra::Spectra()}} objects that stores and retrieves mass spectrometry
-(MS) data from an on-disk
-\href{https://parquet.apache.org/}{Apache Parquet} dataset.
+(MS) data from an on-disk \strong{mzStack} dataset, built on
+\href{https://parquet.apache.org/}{Apache Parquet}.
+
+An mzStack dataset is a directory identified by an \code{mzStack.json}
+manifest. It holds one or more \emph{runs}, of either kind:
+\itemize{
+\item \code{native} - converted from raw MS data files by this package, with m/z
+and intensity stored as Parquet \verb{list<double>} columns beside the
+spectra metadata;
+\item \code{mzpeak} - an index over external
+\href{https://github.com/HUPO-PSI/mzPeak}{HUPO-PSI mzPeak} archives, which
+are read where they are and never modified.
+}
+
+The manifest records which kind each run is, so a dataset never has to be
+identified by guessing from its directory layout.
 
 The backend uses the \href{https://arrow.apache.org/docs/r}{Apache Arrow}
 R bindings to read and write Parquet files. Spectra metadata together
@@ -172,6 +200,13 @@ partition pruning and parallel processing.
 New datasets can be created from raw MS data files using
 \code{\link[=createMsBackendParquetDataset]{createMsBackendParquetDataset()}} or by changing the backend of an
 existing \code{Spectra} object with \code{\link[Spectra:setBackend]{Spectra::setBackend()}}.
+
+A backend can also be opened over a collection of
+\href{https://github.com/HUPO-PSI/mzPeak}{HUPO-PSI mzPeak} archives registered
+with \code{\link[=createMzPeakDataset]{createMzPeakDataset()}}. In that case the archives are read where
+they are and are never modified: the dataset holds only a small derived
+index of the spectrum metadata, and peak data is read from the archives
+on demand. See \code{\link[=createMzPeakDataset]{createMzPeakDataset()}} and \code{\link[=filterContainsMz]{filterContainsMz()}}.
 }
 \details{
 The \code{MsBackendParquet} is principally a \emph{read-only} backend; m/z and
@@ -184,9 +219,21 @@ Because the backend stores only a file system path (and not a live
 connection), \code{MsBackendParquet} objects can be serialised to disk
 with \code{\link[=save]{save()}} / \code{\link[base:saveRDS]{base::saveRDS()}} and reused across parallel workers.
 The DuckDB connection used to read the dataset is held at package
-level, not on the object, and is keyed by process id, so a forked
-worker transparently opens its own. Accordingly, \code{\link[ProtGenerics:backendBpparam]{backendBpparam()}}
-returns the requested parallel processing setup unchanged.
+level, not on the object, and is keyed by process id, so a worker
+started in a \emph{new} process opens its own.
+
+Forked workers are the exception, and \code{\link[ProtGenerics:backendBpparam]{backendBpparam()}} therefore
+downgrades a fork-based setup such as \code{\link[BiocParallel:MulticoreParam]{BiocParallel::MulticoreParam()}}
+to \code{\link[BiocParallel:SerialParam]{BiocParallel::SerialParam()}}. A fork inherits the parent's DuckDB
+connection as a live R external pointer whose finalizer, when the
+child next garbage collects, destroys the inherited database and waits
+for DuckDB's scheduler threads to join. \code{fork()} clones only the
+calling thread, so those threads do not exist in the child and the
+wait never completes. Cluster-based setups such as
+\code{\link[BiocParallel:SnowParam]{BiocParallel::SnowParam()}} start fresh processes, inherit nothing and
+are passed through unchanged. Little is given up by this: DuckDB
+parallelises scans internally, so the work is already spread across
+cores before \code{Spectra} chunks anything.
 }
 \section{Creation of backend objects}{
 
