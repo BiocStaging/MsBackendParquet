@@ -15,13 +15,17 @@ test_that("SQL predicate builders reproduce R's %in% / NA semantics", {
     expect_false(grepl("<=", .pred_range("rtime", 1, Inf), fixed = TRUE))
 
     # Numeric literals must round-trip exactly: truncating an m/z bound
-    # would silently change which spectra match. Assert the round-trip rather
-    # than a typed digit string -- the value tested is not exactly
-    # representable, so its shortest exact rendering is not what was typed.
-    for (v in c(278.09312345678901, 1 / 3, 1e-300, 6.02214076e23)) {
-        p <- .pred_range("precursorMz", v, Inf)
-        lit <- sub(".*>= ", "", sub(")$", "", p))
-        expect_identical(as.numeric(lit), v)
+    # would silently change which spectra match. Assert the round-trip
+    # through DuckDB -- the parser that actually consumes the literal.
+    # R's own as.numeric() is not a usable oracle here: on macOS arm64
+    # `long double` is a plain double, so it loses ~7 digits on literals
+    # below ~1e-291.
+    con <- .duckdb_con()
+    for (v in c(278.09312345678901, 1 / 3, 1e-300, 6.02214076e23,
+                .Machine$double.xmin, .Machine$double.xmax)) {
+        lit <- expect_silent(.sql_num(v))
+        rt <- DBI::dbGetQuery(con, paste0("SELECT ", lit, "::DOUBLE AS v"))$v
+        expect_identical(rt, v)
     }
     expect_identical(.sql_num(NA_real_), "NULL")
 

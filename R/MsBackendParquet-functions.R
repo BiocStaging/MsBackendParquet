@@ -108,25 +108,20 @@
 #' Format a numeric literal that parses back to exactly the double it came
 #' from; truncating an m/z bound is a silent correctness bug.
 #'
-#' 17 significant digits suffice on a correct `printf`, but that is an
-#' assumption about the C library: on at least one platform `%.17g` of 1e-300
-#' comes back parts in 1e7 adrift. So widen until the literal round-trips,
-#' and check that it did.
+#' 17 significant digits is the round-trip width of an IEEE-754 double, and
+#' DuckDB -- the only consumer of these literals -- parses them exactly.
+#' Do not be tempted to shorten the literal by keeping the narrowest one that
+#' satisfies `as.numeric(lit) == x`: R's parser scales the mantissa by a power
+#' of ten held in a `long double`, which on macOS arm64 is a plain double, so
+#' below ~1e-291 that factor is subnormal and the check rejects a literal that
+#' is in fact exact.
 #'
 #' @noRd
 .sql_num <- function(x) {
     if (is.na(x)) return("NULL")
     if (is.infinite(x))
         x <- if (x > 0) .Machine$double.xmax else -.Machine$double.xmax
-    for (digits in 15:17) {
-        lit <- sprintf("%.*g", digits, x)
-        if (as.numeric(lit) == x) return(lit)
-    }
-    lit <- sprintf("%.17g", x)
-    warning("the literal ", lit, " does not parse back to the number it was ",
-            "built from; a filter bound may be off by a rounding step.",
-            call. = FALSE)
-    lit
+    sprintf("%.17g", x)
 }
 
 #' @noRd

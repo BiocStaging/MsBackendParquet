@@ -1,3 +1,9 @@
+# MsBackendParquet 0.99.1
+
+## Bug fixes
+
+- Numeric SQL literals are always written with 17 significant digits, the round-trip width of an IEEE-754 double, instead of being narrowed by checking them with `as.numeric()`. That check mis-rejected exact literals on macOS arm64, where `long double` is a plain double, and the generated SQL now no longer varies between platforms.
+
 # MsBackendParquet 0.99.0
 
 ## Initial Bioconductor submission
