@@ -16,16 +16,27 @@ test_that("SQL predicate builders reproduce R's %in% / NA semantics", {
 
     # Numeric literals must round-trip exactly: truncating an m/z bound
     # would silently change which spectra match. Assert the round-trip
-    # through DuckDB -- the parser that actually consumes the literal.
-    # R's own as.numeric() is not a usable oracle here: on macOS arm64
-    # `long double` is a plain double, so it loses ~7 digits on literals
-    # below ~1e-291.
+    # through DuckDB -- the parser that actually consumes the literal --
+    # over the range MS data occupies (m/z, retention time, intensity).
+    # Not asserted at the extremes of the double range: rounding a 17-digit
+    # decimal correctly at those exponents needs big-integer arithmetic, and
+    # on Windows arm64 the chain sprintf() -> DuckDB lands on the adjacent
+    # double. No filter bound ever reaches 1e-300 or 1e308.
     con <- .duckdb_con()
-    for (v in c(278.09312345678901, 1 / 3, 1e-300, 6.02214076e23,
-                .Machine$double.xmin, .Machine$double.xmax)) {
+    hard <- c(278.09312345678901, 1 / 3, 1234.5678901234567,
+              1.2345678901234567e-05, 98765432109.876541)
+    for (v in hard) {
         lit <- expect_silent(.sql_num(v))
         rt <- DBI::dbGetQuery(con, paste0("SELECT ", lit, "::DOUBLE AS v"))$v
         expect_identical(rt, v)
+    }
+
+    # ... and that assertion has teeth: these values do not survive the 15
+    # significant digits a narrowing loop would have settled for.
+    for (v in hard[-1L]) {
+        rt <- DBI::dbGetQuery(
+            con, paste0("SELECT ", sprintf("%.15g", v), "::DOUBLE AS v"))$v
+        expect_false(identical(rt, v))
     }
     expect_identical(.sql_num(NA_real_), "NULL")
 

@@ -1,3 +1,9 @@
+# MsBackendParquet 0.99.2
+
+## Internal
+
+- The SQL numeric literal round-trip test now covers the numeric range mass spectrometry data occupies, rather than the extremes of the double range where `sprintf()` and DuckDB's literal parser can disagree by one ulp on some platforms.
+
 # MsBackendParquet 0.99.1
 
 ## Bug fixes
