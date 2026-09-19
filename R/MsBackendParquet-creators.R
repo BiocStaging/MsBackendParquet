@@ -129,7 +129,7 @@ createMsBackendParquetDataset <- function(
     path = character(),
     x = character(),
     data,
-    backend = Spectra::MsBackendMzR(),
+    backend = MsBackendMzR(),
     chunksize = 10L,
     partitioning = character(),
     compression = .DEFAULT_COMPRESSION,
@@ -192,8 +192,8 @@ createMsBackendParquetDataset <- function(
     next_id <- 0L
     message("Importing data ...")
     for (i in seq_along(chunks)) {
-        sps <- Spectra::Spectra(source = backend, x[chunks[[i]]],
-                                BPPARAM = BPPARAM)
+        sps <- Spectra(source = backend, x[chunks[[i]]],
+                       BPPARAM = BPPARAM)
         next_id <- .insert_from_spectra(
             path, sps, index = next_id,
             partitioning = partitioning,
@@ -343,7 +343,7 @@ mzMLToParquet <- function(
     createMsBackendParquetDataset(
         path = path,
         x = files,
-        backend = Spectra::MsBackendMzR(),
+        backend = MsBackendMzR(),
         chunksize = as.integer(chunksize),
         partitioning = partitioning,
         compression = compression,
@@ -390,7 +390,7 @@ mzMLToParquet <- function(
         data$spectrum_id_ <- NULL
     }
     data <- as.data.frame(data)
-    core_vars <- names(Spectra::coreSpectraVariables())
+    core_vars <- names(coreSpectraVariables())
     data <- .drop_all_na_columns(data, keep = setdiff(colnames(data),
                                                      core_vars))
     if (!"msLevel" %in% colnames(data)) data$msLevel <- NA_integer_
@@ -424,16 +424,16 @@ mzMLToParquet <- function(
                                  partitioning = character(),
                                  compression = .DEFAULT_COMPRESSION,
                                  row_group_size = .DEFAULT_ROW_GROUP_SIZE) {
-    sv <- Spectra::spectraVariables(sps)
+    sv <- spectraVariables(sps)
     sv <- setdiff(sv, c("mz", "intensity"))
-    spd <- as.data.frame(Spectra::spectraData(sps, columns = sv))
+    spd <- as.data.frame(spectraData(sps, columns = sv))
     if (nrow(spd)) {
         spd$spectrum_id_ <- seq.int(index + 1L, index + nrow(spd))
         # Store mzPeak's column vocabulary on disk (see the read view in
         # `R/column-map.R`); `dataStorage` is supplied by that view.
         spd <- .spectra_df_to_mzpeak(spd)
     }
-    peaks <- Spectra::peaksData(sps, columns = c("mz", "intensity"))
+    peaks <- peaksData(sps, columns = c("mz", "intensity"))
     .write_spectra_chunk(path, spd, peaks,
                          partitioning = partitioning,
                          compression = compression,
@@ -469,7 +469,7 @@ mzMLToParquet <- function(
     .invalidate_dataset_cache(path)
     next_id <- 0L
     for (l in levels(f)) {
-        sub <- Spectra::Spectra(object@backend[f == l])
+        sub <- Spectra(object@backend[f == l])
         next_id <- .insert_from_spectra(
             path, sub, index = next_id,
             partitioning = partitioning, compression = compression,
@@ -490,7 +490,7 @@ mzMLToParquet <- function(
 #' @noRd
 .drop_all_na_columns <- function(x, keep = character()) {
     if (!nrow(x)) return(x)
-    is_all_na <- MsCoreUtils::vapply1l(x, function(z) {
+    is_all_na <- vapply1l(x, function(z) {
         all <- all(is.na(z))
         if (length(all) > 1L) FALSE else all
     })
@@ -517,7 +517,7 @@ mzMLToParquet <- function(
              paste0("'", missing_files, "'", collapse = ", "),
              call. = FALSE)
     }
-    ext <- tolower(tools::file_ext(files))
+    ext <- tolower(file_ext(files))
     ext <- ext[nzchar(ext)]
     bad <- ext[!ext %in% .MS_INPUT_EXTENSIONS]
     if (length(bad)) {
@@ -660,15 +660,21 @@ mzMLToParquet <- function(
 
 #' Stream one mzML file into the dataset.
 #'
+#' @importMethodsFrom mzR header
+#'
+#' @importFrom mzR openMSfile
+#'
+#' @importFrom arrow ParquetFileWriter ParquetWriterProperties FileOutputStream
+#'
 #' @noRd
 .stream_one_file <- function(path, file, batch_size,
                              partitioning, compression,
                              row_group_size = .DEFAULT_ROW_GROUP_SIZE,
                              starting_id) {
     file_abs <- normalizePath(file, mustWork = TRUE)
-    ms <- mzR::openMSfile(file_abs)
-    on.exit(try(mzR::close(ms), silent = TRUE), add = TRUE)
-    hdr <- mzR::header(ms)
+    ms <- openMSfile(file_abs)
+    on.exit(try(close(ms), silent = TRUE), add = TRUE)
+    hdr <- header(ms)
     n <- nrow(hdr)
     if (!n) {
         return(invisible(starting_id))
@@ -709,15 +715,15 @@ mzMLToParquet <- function(
                                   formatC(b, width = 5, flag = "0"),
                                   "-{i}.parquet"))
         } else {
-            tbl <- arrow::as_arrow_table(batch_df)
+            tbl <- as_arrow_table(batch_df)
             if (is.null(writer)) {
                 schema <- tbl$schema
-                sink <- arrow::FileOutputStream$create(
+                sink <- FileOutputStream$create(
                     file.path(.spectra_path(path),
                               paste0("part-", file_token, ".parquet")))
-                writer <- arrow::ParquetFileWriter$create(
+                writer <- ParquetFileWriter$create(
                     schema = schema, sink = sink,
-                    properties = arrow::ParquetWriterProperties$create(
+                    properties = ParquetWriterProperties$create(
                         column_names = names(tbl),
                         compression = compression))
             } else {
@@ -740,11 +746,13 @@ mzMLToParquet <- function(
 #' Handles older mzR versions that only accept a scalar `i` by falling
 #' back to a per-spectrum loop.
 #'
+#' @importMethodsFrom ProtGenerics peaks
+#' 
 #' @noRd
 .read_peaks_batch <- function(ms, idx) {
-    res <- tryCatch(mzR::peaks(ms, idx), error = function(e) NULL)
+    res <- tryCatch(peaks(ms, idx), error = function(e) NULL)
     if (is.null(res))
-        res <- lapply(idx, function(k) mzR::peaks(ms, k))
+        res <- lapply(idx, function(k) peaks(ms, k))
     if (is.matrix(res)) list(res) else res
 }
 
@@ -752,13 +760,15 @@ mzMLToParquet <- function(
 #' Parquet dataset. Each call uses a distinct `basename_template`, so
 #' previously written batches are not overwritten.
 #'
+#' @importFrom arrow as_arrow_table write_dataset
+#'
 #' @noRd
 .write_batch_dataset <- function(batch_df, path, partitioning,
                                  compression,
                                  row_group_size = .DEFAULT_ROW_GROUP_SIZE,
                                  basename) {
-    tbl <- arrow::as_arrow_table(batch_df)
-    arrow::write_dataset(
+    tbl <- as_arrow_table(batch_df)
+    write_dataset(
         tbl, path = .spectra_path(path), format = "parquet",
         partitioning = partitioning,
         compression = compression,
