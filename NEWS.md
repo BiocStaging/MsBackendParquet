@@ -1,3 +1,9 @@
+# MsBackendParquet 0.99.6
+
+## Bug fixes
+
+- Numbers in the manifest now round-trip exactly on platforms where R's string-to-double conversion differs from jsonlite's (Windows on ARM).
+
 # MsBackendParquet 0.99.5
 
 ## New features

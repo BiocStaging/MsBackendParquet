@@ -322,7 +322,8 @@
         if (!any(todo))
             break
         s <- sprintf(paste0("%.", d, "g"), x[todo])
-        back <- as.numeric(s) == x[todo]
+        back <- jsonlite::fromJSON(paste0("[", paste(s, collapse = ","),
+                                          "]")) == x[todo]
         if (d == 17L)
             back[] <- TRUE
         idx <- which(todo)[back]
