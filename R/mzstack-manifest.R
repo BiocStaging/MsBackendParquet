@@ -305,30 +305,12 @@
 
 #' The shortest decimal rendering of each double that reads back exactly.
 #'
-#' jsonlite writes 15 significant digits by default, which does not
-#' round-trip a binary64 value; mzStack requires numbers in the manifest to
-#' round-trip exactly (a tolerance recorded as `0.01` when the code used
-#' `0.010000000000000002` misstates the parameter). 17 digits always
-#' suffice, and trying 15 and 16 first keeps `0.1` from being written as
-#' `0.10000000000000001`. Non-finite values have no JSON form and become
-#' `null`.
-#'
 #' @noRd
 .shortest_double <- function(x) {
     out <- rep("null", length(x))
     ok <- is.finite(x)
-    todo <- ok
-    for (d in 15:17) {
-        if (!any(todo))
-            break
-        s <- sprintf(paste0("%.", d, "g"), x[todo])
-        back <- jsonlite::fromJSON(paste0("[", paste(s, collapse = ","),
-                                          "]")) == x[todo]
-        if (d == 17L)
-            back[] <- TRUE
-        idx <- which(todo)[back]
-        out[idx] <- s[back]
-        todo[idx] <- FALSE
+    if (any(ok)) {
+        out[ok] <- as.vector(arrow::Array$create(x[ok])$cast(arrow::utf8()))
     }
     out
 }

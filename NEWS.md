@@ -1,3 +1,9 @@
+# MsBackendParquet 0.99.7
+
+## Bug fixes
+
+- Manifest numbers are formatted with Arrow rather than `sprintf()`, which is not exact at 17 digits on Windows on ARM.
+
 # MsBackendParquet 0.99.6
 
 ## Bug fixes
